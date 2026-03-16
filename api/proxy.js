@@ -1,40 +1,49 @@
+import fetch from "node-fetch";
+
+const TARGET = "http://private.neofetchid.com:3366"; // target public
+
 export default async function handler(req, res) {
-
-  const TARGET = "http://private.neofetchid.com:3366"
-
   try {
-
-    // ambil path dari URL
-    const path = req.query.path ? "/" + req.query.path.join("/") : ""
-    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""
-    const targetUrl = TARGET + path + query
+    const path = req.query.path ? "/" + req.query.path.join("/") : "";
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const targetUrl = TARGET + path + query;
 
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: {
         "user-agent": req.headers["user-agent"] || "",
-        "accept": "*/*"
-      }
-    })
+        "accept": "*/*",
+      },
+      body: ["GET", "HEAD"].includes(req.method) ? undefined : req,
+    });
 
-    const buffer = await response.arrayBuffer()
+    const contentType = response.headers.get("content-type") || "";
+    let body;
 
-    res.status(response.status)
+    // Rewrite HTML / JS untuk tetap lewat proxy
+    if (contentType.includes("text/html") || contentType.includes("application/javascript")) {
+      body = await response.text();
 
-    // kirim semua header kecuali yang memblokir iframe
+      // Semua link internal diarahkan ke proxy
+      body = body
+        .replaceAll(TARGET, "")
+        .replaceAll('href="/', 'href="/')
+        .replaceAll('src="/', 'src="/')
+        .replaceAll('fetch("', 'fetch("/')
+        .replaceAll('fetch(\'', 'fetch(\'/');
+    } else {
+      const buffer = await response.arrayBuffer();
+      body = Buffer.from(buffer);
+    }
+
     response.headers.forEach((value, key) => {
-      if (
-        key !== "x-frame-options" &&
-        key !== "content-security-policy"
-      ) {
-        res.setHeader(key, value)
+      if (key !== "x-frame-options" && key !== "content-security-policy") {
+        res.setHeader(key, value);
       }
-    })
+    });
 
-    res.send(Buffer.from(buffer))
-
+    res.status(response.status).send(body);
   } catch (err) {
-    res.status(500).send("Proxy error: " + err.message)
+    res.status(500).send("Proxy error: " + err.message);
   }
-
-}
+                    }
