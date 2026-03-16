@@ -1,27 +1,39 @@
 export default async function handler(req, res) {
 
-  const TARGET = "http://private.neofetchid.com:3366/"
+  const TARGET = "http://private.neofetchid.com:3366"
 
-  const path = req.url.replace("/api/proxy", "")
-  const url = TARGET + path
+  try {
 
-  const response = await fetch(url, {
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: new URL(TARGET).host
-    }
-  })
+    const path = req.query.path ? "/" + req.query.path.join("/") : ""
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : ""
 
-  const data = await response.arrayBuffer()
+    const targetUrl = TARGET + path + query
 
-  res.status(response.status)
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: "private.neofetchid.com"
+      }
+    })
 
-  response.headers.forEach((value, key) => {
-    if (key !== "x-frame-options" && key !== "content-security-policy") {
-      res.setHeader(key, value)
-    }
-  })
+    const buffer = await response.arrayBuffer()
 
-  res.send(Buffer.from(data))
+    res.status(response.status)
+
+    response.headers.forEach((value, key) => {
+      if (
+        key !== "x-frame-options" &&
+        key !== "content-security-policy"
+      ) {
+        res.setHeader(key, value)
+      }
+    })
+
+    res.send(Buffer.from(buffer))
+
+  } catch (err) {
+    res.status(500).send("Proxy error: " + err.message)
+  }
+
 }
